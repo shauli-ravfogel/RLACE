@@ -10,13 +10,13 @@ A simple running example is provided withint `rlace.py`.
 #### Parameters
 The main method, `solve_adv_game`, receives several arguments, among them:
 
-`rank`: the rank of the neutralized subspace. `rank=1` is emperically enough to prevent linear prediction in binary classification problem.
+- `rank`: the rank of the neutralized subspace. `rank=1` is emperically enough to prevent linear prediction in binary classification problem.
 
-`epsilon`: stopping criterion for the adversarial game. Stops if abs(acc - majority_acc) < epsilon.
+- `epsilon`: stopping criterion for the adversarial game. Stops if abs(acc - majority_acc) < epsilon.
 
-`optimizer_class`: torch.optim optimizer
+- `optimizer_class`: torch.optim optimizer
 
-`optimizer_params_predictor / optimizer_params_P`: parameters for the optimziers of the predictor and the projection matrix, respectively.
+- `optimizer_params_predictor / optimizer_params_P`: parameters for the optimziers of the predictor and the projection matrix, respectively.
 
 
 #### Running example:
@@ -35,15 +35,15 @@ output = solve_adv_game(X_train, y_train, X_dev, y_dev, rank=rank, device="cpu",
 
 **Optimization**: Even though we run a concave-convex minimax game, which is generallly "well-behaved", optimziation with alternate SGD is still not completely straightforward, and may require some tuning of the optimizers. Accuracy is also not expected to monotonously decrease in optimization; we return the projection matrix which performed best along the entire game. In all experiments on binary classification problems, we identified a projection matrix that neutralizes a rank-1 subspace and decreases classification accuracy to near-random (50%).
 
-#### Usage:
+#### Using the projection:
 
 
 `output` that is returned from `solve_adv_game` is a dictionary, that contains the following keys:
 
-`score`: final accuracy of the predictor on the projected data.
+1. `score`: final accuracy of the predictor on the projected data.
 
-`P_before_svd`: the final approximate projection matrix, before SVD that guarantees it's a proper orthogonal projection matrix.
+2. `P_before_svd`: the final approximate projection matrix, before SVD that guarantees it's a proper orthogonal projection matrix.
 
-`P`: a proper orthogonal matrix that neutralizes a rank-`k` subspace. 
+3. `P`: a proper orthogonal matrix that neutralizes a rank-`k` subspace. 
 
-**Using the projection**: After the adversarial game is terminated, the ``clean" vectors are given by `X.dot(output["P"])`.
+After the adversarial game is terminated, the ``clean" vectors are given by `X.dot(output["P"])`.
