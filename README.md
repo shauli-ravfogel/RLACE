@@ -46,4 +46,4 @@ output = solve_adv_game(X_train, y_train, X_dev, y_dev, rank=rank, device="cpu",
 
 3. `P`: a proper orthogonal matrix that neutralizes a rank-`k` subspace. 
 
-After the adversarial game is terminated, the ``clean" vectors are given by `X.dot(output["P"])`.
+The ``clean" vectors are given by `X.dot(output["P"])`.
