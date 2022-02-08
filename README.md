@@ -5,7 +5,7 @@ This repository contains an implementation of Relaxed Linear Adversarial Concept
 The method relies on a relaxed and constrained version of a minimax game between a predictor that aims to predict `y` and a projection matrix `P` that is optimized to prevent the prediction.
 
 ### How to run
-A simple running example is provided withint `rlace.py`.
+A simple running example is provided within `rlace.py`.
 
 #### Parameters
 The main method, `solve_adv_game`, receives several arguments, among them:
