@@ -5,14 +5,25 @@ from sklearn.linear_model import SGDClassifier
 import time
 from torch.optim import SGD, Adam
 import random
+import sklearn
+from collections import Counter
+import scipy
 
-EVAL_CLF_PARAMS = {"loss": "hinge", "tol": 1e-4, "iters_no_change": 15, "alpha": 1e-4, "max_iter": 25000}
-NUM_CLFS_IN_EVAL = 3 # change to 1 for large dataset / high dimensionality
+EVAL_CLF_PARAMS = {"loss": "log", "tol": 0.5*1e-4, "iters_no_change": 30, "alpha": 1e-4, "max_iter": 200000}
+NUM_CLFS_IN_EVAL = 5 # change to 1 for large dataset / high dimensionality
 
+
+def get_entropy(y):
+    
+    counts = Counter(y)
+    fracts = [c/sum(counts.values()) for c in counts.values()]
+    return scipy.stats.entropy(fracts)
+    
+    
 def init_classifier():
 
     return SGDClassifier(loss=EVAL_CLF_PARAMS["loss"], fit_intercept=True, max_iter=EVAL_CLF_PARAMS["max_iter"], tol=EVAL_CLF_PARAMS["tol"], n_iter_no_change=EVAL_CLF_PARAMS["iters_no_change"],
-                        n_jobs=32, alpha=EVAL_CLF_PARAMS["alpha"])
+                        n_jobs=64, alpha=EVAL_CLF_PARAMS["alpha"])
                         
 def symmetric(X):
     X.data = 0.5 * (X.data + X.data.T)
@@ -22,12 +33,13 @@ def get_score(X_train, y_train, X_dev, y_dev, P, rank):
     P_svd = get_projection(P, rank)
     
     scores = []
+    loss_vals = []
     for i in range(NUM_CLFS_IN_EVAL):
         clf = init_classifier()
         clf.fit(X_train@P_svd, y_train)
         scores.append(clf.score(X_dev@P_svd, y_dev))
-        
-    return np.max(scores)
+        loss_vals.append(sklearn.metrics.log_loss(y_dev, clf.predict_proba(X_dev@P_svd)))
+    return np.max(scores), np.min(loss_vals)
 
 
 def solve_constraint(lambdas, d=1):
@@ -81,7 +93,6 @@ def prepare_output(P,rank,score):
 def solve_adv_game(X_train, y_train, X_dev, y_dev, rank=1, device="cpu", out_iters=75000, in_iters_adv=1, in_iters_clf=1, epsilon=0.0015, batch_size=128, evalaute_every=1000, optimizer_class=SGD, 
 optimizer_params_P={"lr": 0.005, "weight_decay": 1e-4}, optimizer_params_predictor={"lr": 0.005, "weight_decay": 1e-4}):
     """
-
     :param X: The input (np array)
     :param Y: the lables (np array)
     :param X_dev: Dev set (np array)
@@ -129,8 +140,9 @@ optimizer_params_P={"lr": 0.005, "weight_decay": 1e-4}, optimizer_params_predict
     maj = get_majority_acc(y_train)
     pbar = tqdm.tqdm(range(out_iters), total = out_iters, ascii=True)
     count_examples = 0
-    best_P, best_score = None, 1
-
+    best_P, best_score, best_loss = None, 1, -1
+    label_entropy = get_entropy(y_train)
+    
     for i in pbar:
 
         for j in range(in_iters_adv):
@@ -168,20 +180,24 @@ optimizer_params_P={"lr": 0.005, "weight_decay": 1e-4}, optimizer_params_predict
 
         if i % evalaute_every == 0:
             #pbar.set_description("Evaluating current adversary...")
-            score = get_score(X_train, y_train, X_train, y_train, P.detach().cpu().numpy(), rank)
+            score, lossval = get_score(X_train, y_train, X_train, y_train, P.detach().cpu().numpy(), rank)
+            
             if np.abs(score - maj) < np.abs(best_score - maj):
-                best_P, best_score = symmetric(P).detach().cpu().numpy().copy(), score
-
+                best_score = score
+            if lossval > best_loss:
+                best_P, best_loss = symmetric(P).detach().cpu().numpy().copy(), lossval
             # update progress bar
             
             best_so_far = best_score if np.abs(best_score-maj) < np.abs(score-maj) else score
             
-            pbar.set_description("{:.0f}/{:.0f}. Acc post-projection: {:.3f}%; best so-far: {:.3f}%; Maj: {:.3f}%; Gap: {:.3f}%".format(i, out_iters, score * 100, best_so_far * 100, maj * 100, np.abs(best_so_far - maj) * 100))
+            pbar.set_description("{:.0f}/{:.0f}. Acc post-projection: {:.3f}%; best so-far: {:.3f}%; Maj: {:.3f}%; Gap: {:.3f}%; best loss so far: {:.3f}".format(i, out_iters, score * 100, best_so_far * 100, maj * 100, np.abs(best_so_far - maj) * 100, best_loss))
             pbar.refresh()  # to show immediately the update
             time.sleep(0.01)
 
-        if i > 1 and np.abs(best_score - maj) < epsilon:
-                    break
+        if np.abs(best_score - maj) < epsilon:
+            break
+        #if i > 1 and np.abs(best_loss - label_entropy) < epsilon:
+        #            break
     output = prepare_output(best_P,rank,best_score)
     return output
 
@@ -257,5 +273,3 @@ if __name__ == "__main__":
     
     eps = 1e-6
     assert np.abs( (eigs_after_svd > eps).sum() -  (dim - rank) ) < eps
-    
-
